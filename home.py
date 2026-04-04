@@ -7,6 +7,7 @@ import threading
 import shutil
 from facerec import *
 from register import *
+from tracking import *
 from handler import insertData, retrieveData, getAllCriminals
 from object_detection import *
 from object_handler import *
@@ -566,6 +567,92 @@ def getPage3():
                 fg="white", pady=10, bd=0, highlightthickness=0, activebackground="#3E3B3C",
                 activeforeground="white").grid(row=0, column=0, padx=25, pady=25)
 
+def startTracking():
+    global active_page, left_frame, right_frame, thread_event, heading
+    active_page = 4
+    pages[4].lift()
+
+    basicPageSetup(4)
+    heading.configure(text="Real-time Body Tracking")
+    right_frame.configure(text="Tracked Criminals")
+    left_frame.configure(pady=40)
+
+    btn_grid = tk.Frame(right_frame, bg="#3E3B3C")
+    btn_grid.pack()
+
+    (model, names) = train_model()
+    print('Training Successful. Detecting Faces')
+
+    thread_event = threading.Event()
+    thread = threading.Thread(target=trackingLoop, args=(selectTrackingVideo(), model, names))
+    thread.start()
+
+
+def selectTrackingVideo():
+    filetype = [("video", "*.mp4 *.mkv")]
+    path = filedialog.askopenfilename(title="Choose a video", filetypes=filetype)
+    return path if len(path) > 0 else None
+
+
+def trackingLoop(path, model, names):
+    if not path:
+        messagebox.showerror("Error", "No video selected")
+        return
+
+    global thread_event, left_frame, webcam, img_label
+    webcam = cv2.VideoCapture(path)
+    img_label = None
+    person_tracker = PersonTracker()
+    frame_count = 0
+
+    try:
+        while not thread_event.is_set():
+            while True:
+                (return_val, frame) = webcam.read()
+                if return_val == True:
+                    break
+
+            frame = cv2.flip(frame, 1, 0)
+            tracked_boxes = person_tracker.update_trackers(frame)
+
+            for person_id, bbox in tracked_boxes.items():
+                x, y, w, h = [int(v) for v in bbox]
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                name = person_tracker.names[person_id]
+                cv2.putText(frame, f"{name} (ID:{person_id})", (x, y-10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+            if frame_count % 15 == 0:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = detect_faces(gray)
+
+                if len(faces) > 0:
+                    frame_temp, recognized = recognize_face(model, frame.copy(), gray, faces, names)
+
+                    for i, (name, conf) in enumerate(recognized):
+                        face = faces[i]
+                        x, y, w, h = [v * 2 for v in face]
+
+                        body_x = max(0, x - w//2)
+                        body_y = max(0, y - h//4)
+                        body_w = w * 2
+                        body_h = h * 3
+                        body_bbox = (body_x, body_y, body_w, body_h)
+
+                        if person_tracker.is_new_person(body_bbox, tracked_boxes):
+                            person_tracker.add_tracker(frame, body_bbox, name)
+
+            img_size = min(left_frame.winfo_width(), left_frame.winfo_height()) - 20
+            showImage(frame, img_size)
+            frame_count += 1
+
+    except RuntimeError:
+        print("[INFO]Caught Runtime Error")
+    except tk.TclError:
+        print("[INFO]Caught Tcl Error")
+    finally:
+        if webcam:
+            webcam.release()
 
 def selectvideo():
     global left_frame, img_label, img_read
@@ -890,15 +977,17 @@ tk.Label(btn_frame, text="Criminal Detection", fg="white", bg="#3E3B3C", font="A
 tk.Button(btn_frame, text="Add Criminal Details", command=getPage1)
 tk.Button(btn_frame, text="Image Surveillance", command=getPage2)
 tk.Button(btn_frame, text="Video Surveillance", command=getPage3)
+tk.Button(btn_frame, text="Body Tracking", command=startTracking, font="Arial 16", width=20, bg="#000000", fg="white",
+            pady=10, bd=0, highlightthickness=0, activebackground="#3E3B3C", activeforeground="white").pack(pady=15)
 
 # Separator
 tk.Label(btn_frame, text="", bg="#3E3B3C").pack(pady=10)
 
 # Object Detection Buttons
-tk.Label(btn_frame, text="Criminal Object Detection", fg="white", bg="#3E3B3C", font="Arial 18 bold").pack(pady=10)
-tk.Button(btn_frame, text="Add Criminal Objects", command=getPage5)
-tk.Button(btn_frame, text="Object Image Detection", command=getPage6)
-tk.Button(btn_frame, text="Object Video Surveillance", command=getObjectVideoPage)
+# tk.Label(btn_frame, text="Criminal Object Detection", fg="white", bg="#3E3B3C", font="Arial 18 bold").pack(pady=10)
+# tk.Button(btn_frame, text="Add Criminal Objects", command=getPage5)
+# tk.Button(btn_frame, text="Object Image Detection", command=getPage6)
+# tk.Button(btn_frame, text="Object Video Surveillance", command=getObjectVideoPage)
 
 for btn in btn_frame.winfo_children():
     if isinstance(btn, tk.Button):
