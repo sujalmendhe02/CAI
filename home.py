@@ -631,9 +631,10 @@ def trackingLoop(path, model, names):
                 del(tracked_labels[:])
 
                 for i, name in enumerate(current_tracked_names):
-                    tracked_labels.append(tk.Label(right_frame, text=name, bg="red",
+                    tracked_labels.append(tk.Label(right_frame, text=name, bg="orange",
                                                    font="Arial 15 bold", pady=20))
                     tracked_labels[i].pack(fill="x", padx=20, pady=10)
+                    tracked_labels[i].bind("<Button-1>", lambda e, name=name: showCriminalProfile(name))
 
                 old_tracked_names = current_tracked_names
 
