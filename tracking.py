@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from ultralytics import YOLO
 from facerec import detect_faces, train_model, recognize_face
 
 class PersonTracker:
@@ -7,6 +8,24 @@ class PersonTracker:
         self.trackers = {}
         self.next_id = 1
         self.names = {}
+        self.yolo_model = YOLO('yolov8n.pt')
+
+    def detect_persons_yolo(self, frame):
+        results = self.yolo_model(frame, verbose=False)
+        persons = []
+
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                cls = int(box.cls[0])
+                conf = float(box.conf[0])
+
+                if cls == 0 and conf > 0.5:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    x, y, w, h = int(x1), int(y1), int(x2 - x1), int(y2 - y1)
+                    persons.append((x, y, w, h, conf))
+
+        return persons
 
     def add_tracker(self, frame, bbox, name):
         tracker = cv2.TrackerCSRT_create()
@@ -68,24 +87,28 @@ def track_video(video_path):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
         if frame_count % 15 == 0:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = detect_faces(gray)
+            persons_detected = person_tracker.detect_persons_yolo(frame)
 
-            if len(faces) > 0:
-                frame_temp, recognized = recognize_face(model, frame.copy(), gray, faces, names)
+            for person_bbox in persons_detected:
+                x, y, w, h, conf = person_bbox
 
-                for i, (name, conf) in enumerate(recognized):
-                    face = faces[i]
-                    x, y, w, h = [v * 2 for v in face]
+                roi = frame[y:y+h, x:x+w]
+                if roi.size == 0:
+                    continue
 
-                    body_x = max(0, x - w//2)
-                    body_y = max(0, y - h//4)
-                    body_w = w * 2
-                    body_h = h * 3
-                    body_bbox = (body_x, body_y, body_w, body_h)
+                gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                faces = detect_faces(gray_roi)
 
-                    if person_tracker.is_new_person(body_bbox, tracked_boxes):
-                        person_tracker.add_tracker(frame, body_bbox, name)
+                if len(faces) > 0:
+                    frame_roi = roi.copy()
+                    frame_temp, recognized = recognize_face(model, frame_roi, gray_roi, faces, names)
+
+                    if len(recognized) > 0:
+                        name, rec_conf = recognized[0]
+                        body_bbox = (x, y, w, h)
+
+                        if person_tracker.is_new_person(body_bbox, tracked_boxes):
+                            person_tracker.add_tracker(frame, body_bbox, name)
 
         cv2.imshow('Criminal Tracking', frame)
         frame_count += 1

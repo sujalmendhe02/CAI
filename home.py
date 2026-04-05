@@ -599,11 +599,13 @@ def trackingLoop(path, model, names):
         messagebox.showerror("Error", "No video selected")
         return
 
-    global thread_event, left_frame, webcam, img_label
+    global thread_event, left_frame, webcam, img_label, right_frame
     webcam = cv2.VideoCapture(path)
     img_label = None
     person_tracker = PersonTracker()
     frame_count = 0
+    old_tracked_names = []
+    tracked_labels = []
 
     try:
         while not thread_event.is_set():
@@ -617,30 +619,47 @@ def trackingLoop(path, model, names):
 
             for person_id, bbox in tracked_boxes.items():
                 x, y, w, h = [int(v) for v in bbox]
-                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
                 name = person_tracker.names[person_id]
                 cv2.putText(frame, f"{name} (ID:{person_id})", (x, y-10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+            current_tracked_names = [person_tracker.names[pid] for pid in tracked_boxes.keys()]
+            if current_tracked_names != old_tracked_names:
+                for wid in right_frame.winfo_children():
+                    wid.destroy()
+                del(tracked_labels[:])
+
+                for i, name in enumerate(current_tracked_names):
+                    tracked_labels.append(tk.Label(right_frame, text=name, bg="red",
+                                                   font="Arial 15 bold", pady=20))
+                    tracked_labels[i].pack(fill="x", padx=20, pady=10)
+
+                old_tracked_names = current_tracked_names
 
             if frame_count % 15 == 0:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = detect_faces(gray)
+                persons_detected = person_tracker.detect_persons_yolo(frame)
 
-                if len(faces) > 0:
-                    frame_temp, recognized = recognize_face(model, frame.copy(), gray, faces, names)
+                for person_bbox in persons_detected:
+                    x, y, w, h, conf = person_bbox
 
-                    for i, (name, conf) in enumerate(recognized):
-                        face = faces[i]
-                        x, y, w, h = [v * 2 for v in face]
+                    roi = frame[y:y+h, x:x+w]
+                    if roi.size == 0:
+                        continue
 
-                        body_x = max(0, x - w//2)
-                        body_y = max(0, y - h//4)
-                        body_w = w * 2
-                        body_h = h * 3
-                        body_bbox = (body_x, body_y, body_w, body_h)
+                    gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    faces = detect_faces(gray_roi)
 
-                        if person_tracker.is_new_person(body_bbox, tracked_boxes):
-                            person_tracker.add_tracker(frame, body_bbox, name)
+                    if len(faces) > 0:
+                        frame_roi = roi.copy()
+                        frame_temp, recognized = recognize_face(model, frame_roi, gray_roi, faces, names)
+
+                        if len(recognized) > 0:
+                            name, rec_conf = recognized[0]
+                            body_bbox = (x, y, w, h)
+
+                            if person_tracker.is_new_person(body_bbox, tracked_boxes):
+                                person_tracker.add_tracker(frame, body_bbox, name)
 
             img_size = min(left_frame.winfo_width(), left_frame.winfo_height()) - 20
             showImage(frame, img_size)
