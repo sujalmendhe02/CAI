@@ -993,12 +993,28 @@ btn_frame = tk.Frame(pages[0], bg="#3E3B3C", pady=30)
 btn_frame.pack()
 
 # Criminal Detection Buttons
-tk.Label(btn_frame, text="Criminal Detection", fg="white", bg="#3E3B3C", font="Arial 18 bold").pack(pady=10)
-tk.Button(btn_frame, text="Add Criminal Details", command=getPage1)
-tk.Button(btn_frame, text="Image Surveillance", command=getPage2)
-tk.Button(btn_frame, text="Video Surveillance", command=getPage3)
-tk.Button(btn_frame, text="Body Tracking", command=startTracking, font="Arial 16", width=20, bg="#000000", fg="white",
-            pady=10, bd=0, highlightthickness=0, activebackground="#3E3B3C", activeforeground="white").pack(pady=15)
+tk.Label(btn_frame, text="Criminal Detection", fg="white", bg="#3E3B3C", font="Arial 18 bold").pack(pady=10, anchor="center")
+# tk.Button(btn_frame, text="Add Criminal Details", command=getPage1)
+# tk.Button(btn_frame, text="Image Surveillance", command=getPage2)
+# tk.Button(btn_frame, text="Video Surveillance", command=getPage3)
+# tk.Button(btn_frame, text="Body Tracking", command=startTracking, font="Arial 16", width=20, bg="#000000", fg="white",
+#             pady=10, bd=0, highlightthickness=0, activebackground="#3E3B3C", activeforeground="white").pack(pady=15)
+
+btn1 = tk.Button(btn_frame, text="Add Criminal Details", command=getPage1)
+btn2 = tk.Button(btn_frame, text="Image Surveillance", command=getPage2)
+btn3 = tk.Button(btn_frame, text="Video Surveillance", command=getPage3)
+btn4 = tk.Button(btn_frame, text="Body Tracking", command=startTracking)
+
+# Pack first 3
+btn1.pack(pady=15)
+btn2.pack(pady=15)
+btn3.pack(pady=15)
+
+# Extra space push
+#tk.Label(btn_frame, text="", bg="#3E3B3C").pack(expand=True)
+
+# Pack body tracking LAST
+btn4.pack(pady=15)
 
 # Separator
 tk.Label(btn_frame, text="", bg="#3E3B3C").pack(pady=10)
